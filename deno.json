@@ -1,8 +1,9 @@
 {
   "tasks": {
-    "dev": "deno run --watch main.ts"
+    "dev": "deno run --watch --allow-read --allow-net --allow-ffi main.ts"
   },
   "imports": {
+    "@duckdb/node-api": "npm:@duckdb/node-api@^1.5.4-r.1",
     "@std/assert": "jsr:@std/assert@1"
   }
 }

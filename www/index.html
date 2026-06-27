@@ -1,72 +1,103 @@
-<!doctype html>
-<html lang="fr" class="h-100">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="description" content="Carte de la consommation des datacenters en France">
-        <meta name="author" content="David Baldassin">
-        <title>Datacarte</title>
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ Observatoire Énergétique DC & Télécoms</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.1.0/dist/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.1.0/dist/MarkerCluster.Default.css"/>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
 
+    <header>
+      <div class="header-left">
+        <h1>⚡ Observatoire Énergétique</h1>
+      </div>
 
-        <!-- Bootstrap core CSS -->
-        <link href="assets/dist/css/bootstrap.min.css" rel="stylesheet">
+      <div class="stats">
+        <div class="stat-box main-stat">
+          <div class="stat-label">🏢 Total Sites</div>
+          <div class="stat-value" id="dc-count">0</div>
+        </div>
+        <!-- faudra peut être penser à rajouter catégorie Enedis/RTE, conso mesurée vs conso estimé et totale -->
+        <div class="stat-box main-stat">
+          <div class="stat-label">⚡ Conso. Totale</div>
+          <div class="stat-value" id="total-conso">- GWh</div>
+        </div>
+      </div>
+    </header>
 
-        <style>
-         .bd-placeholder-img {
-             font-size: 1.125rem;
-             text-anchor: middle;
-             -webkit-user-select: none;
-             -moz-user-select: none;
-             user-select: none;
-         }
+    <div class="controls">
+      <button class="btn hidden" id="back-btn">⬅ Retour France globale</button>
+      <button class="btn" id="ranking-btn">📊 Classement</button>
 
-         @media (min-width: 768px) {
-             .bd-placeholder-img-lg {
-                 font-size: 3.5rem;
-             }
-         }
-        </style>
+      <div class="filter-group">
+        <select id="filter-naf" class="filter-select">
+          <option value="all">Tous les secteurs</option>
+          <option value="63">NAF 63 (Data Centers)</option>
+          <option value="61">NAF 61 (Télécommunications)</option>
+          <option value="62">NAF 62 (Prog/Conseil)</option>
+        </select>
+        <select id="filter-conso" class="filter-select">
+          <option value="all">Toutes consommations</option>
+          <option value="ultra">⚫ Très Élevée (≥ 100 GWh)</option>
+          <option value="high">🔴 Élevée (≥ 10 GWh)</option>
+          <option value="medium">🟠 Moyenne (1 à 10 GWh)</option>
+          <option value="low">🟡 Faible (< 1 GWh)</option>
+          <option value="unknown">⚪ Inconnue<option/>
+        </select>
+      </div>
+    </div>
 
+    <div id="map"></div>
 
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-              integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-              crossorigin=""/>
+    <div id="ranking-panel" class="hidden">
+      <div class="panel-header">
+        <button class="close-btn" id="close-ranking">×</button>
+        <h2>🏆 Classement Départements</h2>
+        <div class="filter-buttons">
+          <button class="filter-btn active" data-filter="conso">Par Consommation</button>
+          <button class="filter-btn" data-filter="count">Par Nombre de Sites</button>
+        </div>
+      </div>
+      <div id="ranking-list"></div>
+    </div>
 
-        <link href="style.css" rel="stylesheet">
+    <div id="sidebar" class="hidden">
+      <button id="sidebar-back-btn" class="hidden">⬅ Retour Liste</button>
+      <button class="close-btn" id="close-sidebar">×</button>
 
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-                integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-                crossorigin=""></script>
-
-        <script src="map.js"></script>
-
-    </head>
-    <body class="d-flex h-100 text-center text-white bg-dark">
-
-        <div class="cover-container d-flex w-100 h-100 p-3 mx-auto flex-column">
-            <header class="mb-auto">
-                <div>
-                    <h3 class="float-md-start mb-0">Data Carte</h3>
-                    <nav class="nav nav-masthead justify-content-center float-md-end">
-                        <a class="nav-link active" aria-current="page" href="#">Home</a>
-                        <a class="nav-link" href="#">Features</a>
-                        <a class="nav-link" href="#">Contact</a>
-                    </nav>
-                </div>
-            </header>
-
-            <main class="px-3">
-                <h1>Carte de la consommation électrique des datacenters</h1>
-                <p class="lead"> Résumé ici </p>
-                <div id="map"></div>
-            </main>
-
-            <footer class="mt-auto text-white-50">
-                <p>GitHub (TODO)</p>
-            </footer>
+      <div class="sidebar-content">
+        <div class="dc-header">
+          <div id="dc-name">Nom du Site</div>
+          <div id="dc-address">Adresse...</div>
+          <div class="naf-badge" id="naf-badge">NAF</div>
         </div>
 
+        <div class="info-section" id="conso-section">
+          <div class="info-title" id="conso-title">Dernière Conso.</div>
+          <div class="conso-display">
+            <div class="conso-value" id="dc-conso">-- GWh</div>
+            <div class="conso-bar-container">
+              <div id="conso-bar"></div>
+            </div>
+          </div>
+        </div>
 
+        <div class="info-section">
+          <div class="info-title" id="table-title">Historique de consommation</div>
+          <table id="data-table">
+            <thead></thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
-    </body>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.1.0/dist/leaflet.markercluster.js"></script>
+    <script src="script.js"></script>
+  </body>
 </html>
