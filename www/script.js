@@ -143,12 +143,16 @@ function updateGlobalStats(dcs) {
 
 // ================= MARKERS & NAVIGATION =================
 function renderDepartmentMarkers(departments) {
+    console.log("ZOOM");
     departmentLayer.clearLayers();
     datacenterLayer.clearLayers();
     departments.forEach(dep => {
         const marker = L.marker([dep.lat, dep.lng], { icon: dcIcon });
         marker.bindTooltip(`<strong>Dpt ${dep.departement}</strong><br>${dep.dcs.length} sites<br>${(dep.totalMwh / 1000).toFixed(1)} GWh`, { direction: 'top' });
-        marker.on('click', () => zoomToDepartment(dep, true));
+        marker.on('click', () => {
+            console.log("ZOOM");
+            zoomToDepartment(dep, true)
+        });
         marker.addTo(departmentLayer);
     });
 }
@@ -350,14 +354,64 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
     });
 });
 
+function get_it_surface(area, height) {
+    const num_floor = 1 + ((height ?? 0) / 6);
+    const it = area * num_floor / 2;
+
+    return Math.round(it);
+}
+
+function bind_feature_popup(feature, layer) {
+    let properties = "<h2>Propriétés :</h2></br>";
+
+    if(feature.properties.name) {
+        properties += `<b>Nom</b>: ${feature.properties.name}<br/>`;
+    }
+
+    if(feature.properties.conso) {
+        const conso = Math.round(feature.properties.conso, 0);
+        properties += `<b>Consommation annuelle</b>: ${conso} MWh<br/>`;
+    }
+
+    if(feature.properties.power) {
+        properties += `<b>Puissance installée</b>: ${feature.properties.power} kW<br/>`;
+    }
+
+    if(feature.properties.Superficie) {
+        properties += `<b>Emprise au sol</b>: ${feature.properties.Superficie} m2<br/>`;
+    }
+
+    if(feature.properties.Hauteur) {
+        properties += `<b>Hauteur</b>: ${feature.properties.Hauteur} m<br/>`;
+    }
+
+    if(feature.properties["ITSurface"]) {
+        const surface = feature.properties["ITSurface"];
+        properties += `<b>Surface IT</b>: ${surface} m2<br/>`;
+    }
+    else {
+        if(feature.properties.Superficie) {
+            const surface = get_it_surface(feature.properties.Superficie, feature.properties.Hauteur);
+            properties += `<b>Surface IT (estimée)</b>: ${surface} m2<br/>`;
+        }
+    }
+
+    if(feature.properties.code_secteur_naf2) {
+        properties += `<b>NAF2</b>: ${feature.properties.code_secteur_naf2}<br/>`;
+    }
+
+    layer.bindPopup(properties);
+}
+
 async function initDashboard() {
     loadFranceMask();
     document.getElementById('dc-count').innerText = "...";
     try {
         const datacenters_geojson = await loadDatacenters();
-        let geojson = L.geoJSON(datacenters_geojson);
-
-        let markers = L.markerClusterGroup();
+        const geojson = L.geoJSON(datacenters_geojson, {
+            onEachFeature: bind_feature_popup
+        });
+        const markers = L.markerClusterGroup();
 
         markers.addLayer(geojson);
         map.addLayer(markers);
