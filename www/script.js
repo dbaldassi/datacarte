@@ -11,6 +11,10 @@ const mapConfig = {
     maxBounds: [[41, -6], [52, 12]]
 };
 
+const pdl_layer = L.layerGroup();
+const markers = L.markerClusterGroup();
+const pdl_dc_line_layer = L.layerGroup();
+
 // ================= LAYERS & STATE =================
 let departmentLayer;
 let datacenterLayer;
@@ -26,22 +30,35 @@ const NAF_LABELS = {
 };
 
 // ================= INIT MAP =================
+
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Tiles style by <a href="https://www.hotosm.org/" target="_blank">Humanitarian OpenStreetMap Team</a> hosted by <a href="https://openstreetmap.fr/" target="_blank">OpenStreetMap France</a>',
+    maxZoom: 19
+});
+
 const map = L.map('map', {
     maxBounds: mapConfig.maxBounds,
     maxBoundsViscosity: 1.0,
-    zoomControl: false
+    zoomControl: false,
+    layers: [osm,markers]
 }).setView(mapConfig.center, mapConfig.zoom);
 
+const baseLayers = {
+	'OpenStreetMap': osm,
+};
+
+const overlays = {
+    'Point de livraison': pdl_layer,
+    'Datacenters': markers,
+    'Connexion PdL et DC': pdl_dc_line_layer
+};
+
+const layerControl = L.control.layers(baseLayers, overlays).addTo(map);
+
 L.control.zoom({ position: 'bottomright' }).addTo(map);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© Datacenter consommation enedis', maxZoom: 19
-}).addTo(map);
 
 var datacenters_geojson;
 var linear_index;
-
-// departmentLayer = L.layerGroup().addTo(map);
-// datacenterLayer = L.layerGroup();
 
 const dcIcon = L.icon({
     iconUrl: 'https://cdn-icons-png.flaticon.com/512/2880/2880656.png',
@@ -510,7 +527,51 @@ function apply_filters(feature) {
     return filter_conso(feature) && filter_pdl(feature) && filter_surface(feature);
 }
 
-const markers = L.markerClusterGroup();
+function add_enedis_connection(feature) {
+    if(feature.properties["Enedis Latitude"]) {
+        L.polyline([[feature.properties["Enedis Latitude"], feature.properties["Enedis Longitude"]],
+                    feature.geometry.coordinates.reverse()])
+         .bindTooltip(`${feature.properties.Distance_m} m`)
+         .addTo(pdl_dc_line_layer);
+    }
+}
+
+function add_enedis_pdl(feature) {
+    if(feature.properties["Enedis Latitude"]) {
+        const popup_text = `<h2>Propriétés : </h2><br/>
+<b>Consommation (2024)</b>: ${Math.round(feature.properties.conso)} MWh</br>
+<b>Adresse</b>: ${feature.properties.Adresse}</br>
+<b>Commune</b>: ${feature.properties["Nom commune"]}</br>
+<b>Code NAF2</b>: ${feature.properties.code_secteur_naf2}
+`;
+
+        L.marker([feature.properties["Enedis Latitude"], feature.properties["Enedis Longitude"]])
+         .bindPopup(popup_text)
+         .addTo(pdl_layer);
+    }
+}
+
+function add_rte_connection(feature) {
+    if(feature.properties["Géo-point IRIS"]) {
+        L.polyline([feature.properties["Géo-point IRIS"].split(','),
+                    feature.geometry.coordinates.reverse()])
+         .bindTooltip(`${feature.properties.Distance_m} m`)
+         .addTo(pdl_dc_line_layer);
+    }
+}
+
+function add_rte_pdl(feature) {
+    if(feature.properties["Géo-point IRIS"]) {
+        const popup_text = `<h2>Propriétés : </h2><br/>
+<b>Consommation (2023)</b>: ${Math.round(feature.properties.conso)} MWh</br>
+<b>Commune</b>: ${feature.properties["Nom commune"]}</br>
+`;
+
+        L.marker(feature.properties["Géo-point IRIS"].split(','))
+         .bindPopup(popup_text)
+         .addTo(pdl_layer);
+    }
+}
 
 function redraw_markers() {
     markers.clearLayers();
@@ -531,10 +592,20 @@ function redraw_markers() {
             const surface = feature.properties["ITSurface"] ?? get_it_surface(feature.properties.Superficie, feature.properties.Hauteur);
 
             if(is_enedis(feature)) {
-                conso_address.set(feature.properties.Adresse, feature.properties.conso);
+                if(!conso_address.has(feature.properties.Adresse)) {
+                    conso_address.set(feature.properties.Adresse, feature.properties.conso);
+                    add_enedis_pdl(feature);
+                }
+
+                add_enedis_connection(feature);
             }
             else if(is_rte(feature)) {
-                conso_iris.set(feature.properties["Code IRIS"], feature.properties.conso);
+                if(!conso_address.has(feature.properties["Code IRIS"])) {
+                    conso_iris.set(feature.properties["Code IRIS"], feature.properties.conso);
+                    add_rte_pdl(feature);
+                }
+
+                add_rte_connection(feature);
             }
             else {
                 est_conso += estimate_consumption(surface);
@@ -554,7 +625,7 @@ function redraw_markers() {
     document.getElementById('total-surface-it').innerText = `${surface_it_total} m2`;
 
     markers.addLayer(geojson);
-    map.addLayer(markers);
+    // map.addLayer(markers);
 }
 
 async function initDashboard() {
