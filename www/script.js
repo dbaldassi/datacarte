@@ -38,6 +38,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
 }).addTo(map);
 
 var datacenters_geojson;
+var linear_index;
 
 // departmentLayer = L.layerGroup().addTo(map);
 // datacenterLayer = L.layerGroup();
@@ -71,11 +72,11 @@ async function loadFranceMask() {
 }
 
 // ================= CHARGEMENT =================
-async function loadDatacenters() {
+async function fetch_route(route) {
     try {
-        const url = `${protocol}//${host}:${port}/datacenters`;
+        const url = `${protocol}//${host}:${port}/${route}`;
         const response = await fetch(url);
-        if (!response.ok) throw new Error("Could not fetch datacenters.");
+        if (!response.ok) throw new Error(`Could not fetch ${route}.`);
 
         const data = await response.json();
         return data;
@@ -353,6 +354,31 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
     });
 });
 
+
+function magnitude_order(valeur, uniteInitiale) {
+    const prefixes = ['_', 'K', 'M', 'G', 'T', 'P', 'E'];
+
+    const indexInitial = prefixes.indexOf(uniteInitiale.toUpperCase());
+    if (indexInitial === -1) {
+        throw new Error("Unité initiale non supportée. Utilisez K, M, G, T, P, E.");
+    }
+
+    let valeurBrute = valeur * Math.pow(1000, indexInitial);
+
+    if (valeurBrute === 0) return "0 "; // Gestion du zéro
+
+    let indexOptimal = Math.floor(Math.log10(Math.abs(valeurBrute)) / 3);
+
+    indexOptimal = Math.max(0, Math.min(indexOptimal, prefixes.length - 1));
+
+    let valeurFinale = valeurBrute / Math.pow(1000, indexOptimal);
+    valeurFinale = Math.round(valeurFinale * 1e12) / 1e12;
+
+    const suffixe = prefixes[indexOptimal] === '_' ? '' : prefixes[indexOptimal];
+
+    return `${Math.round(valeurFinale * 100) / 100} ${suffixe}`;
+}
+
 function get_it_surface(area, height) {
     const num_floor = 1 + ((height ?? 0) / 6);
     const it = area * num_floor / 2;
@@ -402,12 +428,16 @@ function bind_feature_popup(feature, layer) {
     layer.bindPopup(properties);
 }
 
+function estimate_consumption(surface) {
+    return surface * linear_index.slope + linear_index.origin;
+}
+
 function get_consumption_category(conso) {
     const gwh = conso / 1000;
 
-    if(gwh > 100) return "ultra";
-    if(gwh > 10)  return "high";
-    if(gwh > 1)   return "medium";
+    if(gwh > 100)      return "ultra";
+    if(gwh > 10)       return "high";
+    if(gwh > 1)        return "medium";
     if(gwh && gwh > 0) return "low";
 
     return "unknown";
@@ -470,6 +500,7 @@ function redraw_markers() {
     const conso_iris = new Map();
     const conso_address = new Map();
     let num_dc = 0;
+    let est_conso = 0;
 
     const geojson = L.geoJSON(datacenters_geojson, {
         pointToLayer: (feature, latlng) => L.circleMarker(latlng),
@@ -484,6 +515,10 @@ function redraw_markers() {
             else if(is_rte(feature)) {
                 conso_iris.set(feature.properties["Code IRIS"], feature.properties.conso);
             }
+            else {
+                const surface = feature.properties["ITSurface"] ?? get_it_surface(feature.properties.Superficie, feature.properties.Hauteur);
+                est_conso += estimate_consumption(surface);
+            }
 
             num_dc += 1;
         }
@@ -493,7 +528,8 @@ function redraw_markers() {
           conso_address.values().reduce((a, b) => a + b, 0);
 
     document.getElementById('dc-count').innerText = num_dc;
-    document.getElementById('total-conso').innerText = `${Math.round(conso / 1000)} GWh`;
+    document.getElementById('total-conso-pdl').innerText = `${magnitude_order(conso, "M")}Wh`;
+    document.getElementById('total-conso-est').innerText = `${magnitude_order(conso + est_conso, "M")}Wh`;
 
     markers.addLayer(geojson);
     map.addLayer(markers);
@@ -503,7 +539,8 @@ async function initDashboard() {
     loadFranceMask();
 
     try {
-        datacenters_geojson = await loadDatacenters();
+        linear_index = await fetch_route("linear_index");
+        datacenters_geojson = await fetch_route("datacenters");
         redraw_markers();
 
         document.getElementById('filter-conso').addEventListener('change', redraw_markers);

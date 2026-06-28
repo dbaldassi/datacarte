@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ Observatoire Énergétique DC & Télécoms</title>
+    <title>⚡ Datacarte</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.1.0/dist/MarkerCluster.css"/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.1.0/dist/MarkerCluster.Default.css"/>
@@ -23,8 +23,12 @@
         </div>
         <!-- faudra peut être penser à rajouter catégorie Enedis/RTE, conso mesurée vs conso estimé et totale -->
         <div class="stat-box main-stat">
-          <div class="stat-label">⚡ Conso. Totale</div>
-          <div class="stat-value" id="total-conso">- GWh</div>
+          <div class="stat-label">⚡ Conso. Totale Points de livraison</div>
+          <div class="stat-value" id="total-conso-pdl">- GWh</div>
+        </div>
+        <div class="stat-box main-stat">
+          <div class="stat-label">⚡ Conso. Totale Estimée*</div>
+          <div class="stat-value" id="total-conso-est">- GWh</div>
         </div>
       </div>
     </header>
@@ -43,7 +47,7 @@
           <option value="unknown">⚪ Inconnue<option/>
         </select>
         <select id="filter-pdl" class="filter-select">
-          <option value="all">Tous</option>
+          <option value="all">Tous les PDL</option>
           <option value="enedis">Enedis</option>
           <option value="rte">RTE</option>
           <option value="likely-rte">Potentiellement RTE</option>

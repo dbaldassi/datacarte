@@ -7,6 +7,7 @@ const duck = new DuckDBManager;
 const router = new Router();
 
 router.get("/datacenters", (ctx: RouterContext<string>) => list_datacenters(ctx));
+router.get("/linear_index", (ctx: RouterContext<string>) => get_linear_index(ctx));
 
 const app = new Application();
 
@@ -32,9 +33,6 @@ async function list_datacenters(ctx: RouterContext<string>): Promise<void> {
     const reader: DuckDBResultReader = await duck.execute(query);
     const rows = reader.getRowObjectsJson();
 
-    // TODO: Transform reader json results into a usable geojson object, using Longitude and Latitude key for the coordinates, and put other keys into the properties of the point.
-    // try to use the .map method
-
     const features = rows.map((row: any) => {
         const properties: any = {};
         for (const key of Object.keys(row)) {
@@ -59,4 +57,23 @@ async function list_datacenters(ctx: RouterContext<string>): Promise<void> {
 
     ctx.response.type = 'application/json';
     ctx.response.body = JSON.stringify(geojson);
+}
+
+
+async function get_linear_index(ctx: RouterContext<string>) : Promise<void> {
+    const query = `WITH raw_data AS (SELECT conso,SUM(Superficie)::DOUBLE AS Superficie, SUM(ITSurface)::DOUBLE as IT, AVG(Hauteur)::DOUBLE AS Hauteur FROM datacenters
+WHERE ("ITSurface" IS NOT NULL OR "Superficie" IS NOT NULL) AND ("Code IRIS" IS NULL OR "Nom commune"  IN ('Marcoussis', 'Labruguière')) AND conso IS NOT NULL
+GROUP BY conso
+ORDER BY Superficie),
+data AS (
+SELECT conso, ROUND(COALESCE(IT, (Superficie * (1 + COALESCE(Hauteur, 0) / 6.0)) / 2.0) ) AS surface
+FROM raw_data
+)
+SELECT regr_slope(conso, surface) AS slope, regr_intercept(conso, surface) AS origin FROM data
+`;
+
+    const reader: DuckDBResultReader = await duck.execute(query);
+    const rows = reader.getRowObjectsJson();
+
+    ctx.response.body = JSON.stringify(rows[0]);
 }
