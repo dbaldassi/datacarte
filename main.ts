@@ -24,12 +24,10 @@ app.use(async (context: RouterContext<string>, next: any) => {
 app.use(router.routes());
 app.use(router.allowedMethods());
 
-console.log("Listening");
 await app.listen({ port: 8000 });
 
 
 async function list_datacenters(ctx: RouterContext<string>): Promise<void> {
-    console.log("LIST DC");
     const query = `SELECT * FROM datacenters`;
     const reader: DuckDBResultReader = await duck.execute(query);
     const rows = reader.getRowObjectsJson();

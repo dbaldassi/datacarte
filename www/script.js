@@ -403,12 +403,40 @@ function bind_feature_popup(feature, layer) {
     layer.bindPopup(properties);
 }
 
+function get_consumption_category(conso) {
+    const gwh = conso / 1000;
+
+    if(gwh > 100) return "ultra";
+    if(gwh > 10)  return "high";
+    if(gwh > 1)   return "medium";
+    if(gwh && gwh > 0) return "low";
+
+    return "unknown";
+}
+
+function set_feature_style(feature) {
+    const cat = get_consumption_category(feature.properties.conso);
+    console.log(cat);
+
+    switch(cat) {
+    case 'ultra':   return { color: "#000000" };
+    case 'high':    return { color: "#ff0000" };
+    case 'medium':  return { color: "#ff9800" };
+    case 'low':     return { color: "#ddbb00" };
+    case 'unknown': return { color: "#aaaaaa" };
+    }
+
+    return { color: "#ffffff" };
+}
+
 async function initDashboard() {
     loadFranceMask();
     document.getElementById('dc-count').innerText = "...";
     try {
         const datacenters_geojson = await loadDatacenters();
         const geojson = L.geoJSON(datacenters_geojson, {
+            pointToLayer: (feature, latlng) => L.circleMarker(latlng),
+            style: set_feature_style,
             onEachFeature: bind_feature_popup
         });
         const markers = L.markerClusterGroup();
