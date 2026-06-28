@@ -443,6 +443,16 @@ function get_consumption_category(conso) {
     return "unknown";
 }
 
+function get_surface_category(surface) {
+    if(surface > 10000) return "ultra";
+    if(surface >= 5000) return "high";
+    if(surface >= 1000) return "medium";
+    if(surface >= 500) return "low";
+    if(surface >= 100) return "tiny";
+
+    return "micro";
+}
+
 function set_feature_style(feature) {
     const cat = get_consumption_category(feature.properties.conso);
 
@@ -462,6 +472,14 @@ function filter_conso(feature) {
     const cat = get_consumption_category(feature.properties.conso);
 
     return conso_filter === "all" || cat === conso_filter;
+}
+
+function filter_surface(feature) {
+    const filter = document.getElementById('filter-surface').value;
+    const surface = feature.properties["ITSurface"] ?? get_it_surface(feature.properties.Superficie, feature.properties.Hauteur);
+    const cat = get_surface_category(surface);
+
+    return filter === "all" || cat === filter;
 }
 
 function is_enedis(feature) {
@@ -489,7 +507,7 @@ function filter_pdl(feature) {
 }
 
 function apply_filters(feature) {
-    return filter_conso(feature) && filter_pdl(feature);
+    return filter_conso(feature) && filter_pdl(feature) && filter_surface(feature);
 }
 
 const markers = L.markerClusterGroup();
@@ -501,6 +519,7 @@ function redraw_markers() {
     const conso_address = new Map();
     let num_dc = 0;
     let est_conso = 0;
+    let surface_it_total = 0;
 
     const geojson = L.geoJSON(datacenters_geojson, {
         pointToLayer: (feature, latlng) => L.circleMarker(latlng),
@@ -509,6 +528,8 @@ function redraw_markers() {
         onEachFeature: (feature, layer) => {
             bind_feature_popup(feature, layer);
 
+            const surface = feature.properties["ITSurface"] ?? get_it_surface(feature.properties.Superficie, feature.properties.Hauteur);
+
             if(is_enedis(feature)) {
                 conso_address.set(feature.properties.Adresse, feature.properties.conso);
             }
@@ -516,11 +537,11 @@ function redraw_markers() {
                 conso_iris.set(feature.properties["Code IRIS"], feature.properties.conso);
             }
             else {
-                const surface = feature.properties["ITSurface"] ?? get_it_surface(feature.properties.Superficie, feature.properties.Hauteur);
                 est_conso += estimate_consumption(surface);
             }
 
             num_dc += 1;
+            surface_it_total += surface;
         }
     });
 
@@ -530,6 +551,7 @@ function redraw_markers() {
     document.getElementById('dc-count').innerText = num_dc;
     document.getElementById('total-conso-pdl').innerText = `${magnitude_order(conso, "M")}Wh`;
     document.getElementById('total-conso-est').innerText = `${magnitude_order(conso + est_conso, "M")}Wh`;
+    document.getElementById('total-surface-it').innerText = `${surface_it_total} m2`;
 
     markers.addLayer(geojson);
     map.addLayer(markers);
@@ -545,6 +567,7 @@ async function initDashboard() {
 
         document.getElementById('filter-conso').addEventListener('change', redraw_markers);
         document.getElementById('filter-pdl').addEventListener('change', redraw_markers);
+        document.getElementById('filter-surface').addEventListener('change', redraw_markers);
 
     } catch (e) {
         console.error(e);

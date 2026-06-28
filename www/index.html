@@ -30,6 +30,10 @@
           <div class="stat-label">⚡ Conso. Totale Estimée*</div>
           <div class="stat-value" id="total-conso-est">- GWh</div>
         </div>
+        <div class="stat-box main-stat">
+          <div class="stat-label">⚡ Surface IT totale</div>
+          <div class="stat-value" id="total-surface-it">- m2</div>
+        </div>
       </div>
     </header>
 
@@ -52,6 +56,15 @@
           <option value="rte">RTE</option>
           <option value="likely-rte">Potentiellement RTE</option>
           <option value="none">Inconnu</option>
+        </select>
+         <select id="filter-surface" class="filter-select">
+          <option value="all">Toutes les surface IT</option>
+          <option value="ultra">+10000 m2</option>
+          <option value="high">5000 - 10000 m2</option>
+          <option value="medium">1000 - 5000 m2</option>
+          <option value="low">500 - 1000 m2</option>
+          <option value="tiny">100 - 500 m2<option/>
+          <option value="micro">-100 m2<option/>
         </select>
       </div>
     </div>
