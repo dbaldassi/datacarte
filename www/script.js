@@ -439,15 +439,21 @@ function is_enedis(feature) {
 }
 
 function is_rte(feature) {
-    return feature.properties.conso && feature.properties["Code IRIS"];
+    return feature.properties.conso && feature.properties["Code IRIS"] &&
+        (feature.properties["Nom commune"] === "Marcoussis" || feature.properties["Nom commune"] === "Labruguière");
+}
+
+function is_likely_rte(feature) {
+    return !is_rte(feature) && feature.properties.conso && feature.properties["Code IRIS"];
 }
 
 function filter_pdl(feature) {
     const pdl_filter = document.getElementById('filter-pdl').value;
 
-    if(pdl_filter === "enedis") return is_enedis(feature);
-    if(pdl_filter === "rte") return is_rte(feature);
-    if(pdl_filter === "none") return !is_enedis(feature) && !is_rte(feature);
+    if(pdl_filter === "enedis")     return is_enedis(feature);
+    if(pdl_filter === "rte")        return is_rte(feature);
+    if(pdl_filter === "likely-rte") return is_likely_rte(feature);
+    if(pdl_filter === "none")       return !is_enedis(feature) && !is_rte(feature) && !is_likely_rte(feature);
 
     return true;
 }
@@ -461,12 +467,33 @@ const markers = L.markerClusterGroup();
 function redraw_markers() {
     markers.clearLayers();
 
+    const conso_iris = new Map();
+    const conso_address = new Map();
+    let num_dc = 0;
+
     const geojson = L.geoJSON(datacenters_geojson, {
         pointToLayer: (feature, latlng) => L.circleMarker(latlng),
         style: set_feature_style,
         filter: apply_filters,
-        onEachFeature: bind_feature_popup
+        onEachFeature: (feature, layer) => {
+            bind_feature_popup(feature, layer);
+
+            if(is_enedis(feature)) {
+                conso_address.set(feature.properties.Adresse, feature.properties.conso);
+            }
+            else if(is_rte(feature)) {
+                conso_iris.set(feature.properties["Code IRIS"], feature.properties.conso);
+            }
+
+            num_dc += 1;
+        }
     });
+
+    const conso = conso_iris.values().reduce((a, b) => a + b, 0) +
+          conso_address.values().reduce((a, b) => a + b, 0);
+
+    document.getElementById('dc-count').innerText = num_dc;
+    document.getElementById('total-conso').innerText = `${Math.round(conso / 1000)} GWh`;
 
     markers.addLayer(geojson);
     map.addLayer(markers);
