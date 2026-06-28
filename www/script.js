@@ -37,6 +37,8 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     attribution: '© Datacenter consommation enedis', maxZoom: 19
 }).addTo(map);
 
+var datacenters_geojson;
+
 // departmentLayer = L.layerGroup().addTo(map);
 // datacenterLayer = L.layerGroup();
 
@@ -131,7 +133,7 @@ function applyFilters() {
 }
 
 document.getElementById('filter-naf').addEventListener('change', applyFilters);
-document.getElementById('filter-conso').addEventListener('change', applyFilters);
+document.getElementById('filter-conso').addEventListener('change', redraw_markers);
 
 // ================= UI STATISTIQUES (MODIFIÉ) =================
 function updateGlobalStats(dcs) {
@@ -416,7 +418,6 @@ function get_consumption_category(conso) {
 
 function set_feature_style(feature) {
     const cat = get_consumption_category(feature.properties.conso);
-    console.log(cat);
 
     switch(cat) {
     case 'ultra':   return { color: "#000000" };
@@ -429,22 +430,38 @@ function set_feature_style(feature) {
     return { color: "#ffffff" };
 }
 
+function apply_filters(feature) {
+    const conso_filter = document.getElementById('filter-conso').value;
+    const cat = get_consumption_category(feature.properties.conso);
+
+    return conso_filter === "all" || cat === conso_filter;
+}
+
+const markers = L.markerClusterGroup();
+
+function redraw_markers() {
+    markers.clearLayers();
+
+    const geojson = L.geoJSON(datacenters_geojson, {
+        pointToLayer: (feature, latlng) => L.circleMarker(latlng),
+        style: set_feature_style,
+        filter: apply_filters,
+        onEachFeature: bind_feature_popup
+    });
+
+    markers.addLayer(geojson);
+    map.addLayer(markers);
+}
+
 async function initDashboard() {
     loadFranceMask();
-    document.getElementById('dc-count').innerText = "...";
-    try {
-        const datacenters_geojson = await loadDatacenters();
-        const geojson = L.geoJSON(datacenters_geojson, {
-            pointToLayer: (feature, latlng) => L.circleMarker(latlng),
-            style: set_feature_style,
-            onEachFeature: bind_feature_popup
-        });
-        const markers = L.markerClusterGroup();
 
-        markers.addLayer(geojson);
-        map.addLayer(markers);
+    try {
+        datacenters_geojson = await loadDatacenters();
+        redraw_markers();
 
     } catch (e) {
+        console.error(e);
         document.getElementById('dc-count').innerText = "Err";
     }
 }
