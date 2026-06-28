@@ -34,12 +34,6 @@
       <button class="btn" id="ranking-btn">📊 Classement</button>
 
       <div class="filter-group">
-        <select id="filter-naf" class="filter-select">
-          <option value="all">Tous les secteurs</option>
-          <option value="63">NAF 63 (Data Centers)</option>
-          <option value="61">NAF 61 (Télécommunications)</option>
-          <option value="62">NAF 62 (Prog/Conseil)</option>
-        </select>
         <select id="filter-conso" class="filter-select">
           <option value="all">Toutes consommations</option>
           <option value="ultra">⚫ Très Élevée (≥ 100 GWh)</option>
@@ -47,6 +41,12 @@
           <option value="medium">🟠 Moyenne (1 à 10 GWh)</option>
           <option value="low">🟡 Faible (< 1 GWh)</option>
           <option value="unknown">⚪ Inconnue<option/>
+        </select>
+        <select id="filter-pdl" class="filter-select">
+          <option value="all">Tous</option>
+          <option value="enedis">Enedis</option>
+          <option value="rte">RTE</option>
+          <option value="none">Inconnu</option>
         </select>
       </div>
     </div>

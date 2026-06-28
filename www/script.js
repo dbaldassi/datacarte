@@ -132,9 +132,6 @@ function applyFilters() {
     }
 }
 
-document.getElementById('filter-naf').addEventListener('change', applyFilters);
-document.getElementById('filter-conso').addEventListener('change', redraw_markers);
-
 // ================= UI STATISTIQUES (MODIFIÉ) =================
 function updateGlobalStats(dcs) {
     document.getElementById('dc-count').innerText = dcs.length;
@@ -430,11 +427,33 @@ function set_feature_style(feature) {
     return { color: "#ffffff" };
 }
 
-function apply_filters(feature) {
+function filter_conso(feature) {
     const conso_filter = document.getElementById('filter-conso').value;
     const cat = get_consumption_category(feature.properties.conso);
 
     return conso_filter === "all" || cat === conso_filter;
+}
+
+function is_enedis(feature) {
+    return feature.properties.conso && feature.properties.Adresse && !feature.properties["Code IRIS"];
+}
+
+function is_rte(feature) {
+    return feature.properties.conso && feature.properties["Code IRIS"];
+}
+
+function filter_pdl(feature) {
+    const pdl_filter = document.getElementById('filter-pdl').value;
+
+    if(pdl_filter === "enedis") return is_enedis(feature);
+    if(pdl_filter === "rte") return is_rte(feature);
+    if(pdl_filter === "none") return !is_enedis(feature) && !is_rte(feature);
+
+    return true;
+}
+
+function apply_filters(feature) {
+    return filter_conso(feature) && filter_pdl(feature);
 }
 
 const markers = L.markerClusterGroup();
@@ -459,6 +478,9 @@ async function initDashboard() {
     try {
         datacenters_geojson = await loadDatacenters();
         redraw_markers();
+
+        document.getElementById('filter-conso').addEventListener('change', redraw_markers);
+        document.getElementById('filter-pdl').addEventListener('change', redraw_markers);
 
     } catch (e) {
         console.error(e);
