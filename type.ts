@@ -8,3 +8,9 @@ export type DuckTableInfo = {
     name: string,
     columns: DuckColumnInfo[]
 }
+
+export type HistoryQuery = {
+    address: string,
+    naf: string,
+    city: string
+}

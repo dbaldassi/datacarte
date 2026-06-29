@@ -71,10 +71,10 @@ async function loadFranceMask() {
 }
 
 // ================= CHARGEMENT =================
-async function fetch_route(route) {
+async function fetch_route(route, opts) {
     try {
         const url = `${protocol}//${host}:${port}/${route}`;
-        const response = await fetch(url);
+        const response = await fetch(url, opts);
         if (!response.ok) throw new Error(`Could not fetch ${route}.`);
 
         const data = await response.json();
@@ -84,160 +84,64 @@ async function fetch_route(route) {
     }
 }
 
-// ================= MARKERS & NAVIGATION =================
-function renderDepartmentMarkers(departments) {
-    console.log("ZOOM");
-    departmentLayer.clearLayers();
-    datacenterLayer.clearLayers();
-    departments.forEach(dep => {
-        const marker = L.marker([dep.lat, dep.lng], { icon: dcIcon });
-        marker.bindTooltip(`<strong>Dpt ${dep.departement}</strong><br>${dep.dcs.length} sites<br>${(dep.totalMwh / 1000).toFixed(1)} GWh`, { direction: 'top' });
-        marker.on('click', () => {
-            console.log("ZOOM");
-            zoomToDepartment(dep, true)
-        });
-        marker.addTo(departmentLayer);
-    });
-}
-
-function goBackToFrance() {
-    selectedDeptCode = null; 
-    datacenterLayer.clearLayers();
-    map.removeLayer(datacenterLayer);
-    renderDepartmentMarkers(currentDepartments);
-    map.setView(mapConfig.center, mapConfig.zoom);
-    document.getElementById('back-btn').classList.add('hidden');
-    document.getElementById('sidebar').classList.add('hidden');
-}
-
-document.getElementById('back-btn').addEventListener('click', goBackToFrance);
-
-function zoomToDepartment(dep, animate = true) {
-    selectedDeptCode = dep.departement; 
-    departmentLayer.clearLayers();
-    datacenterLayer.clearLayers();
-    datacenterLayer.addTo(map);
-    
-    const bounds = [];
-    dep.dcs.forEach(dc => {
-        const mwh = dc.historique[0]?.mwh || 0;
-        const marker = L.marker([dc.lat, dc.lng], { icon: getColoredMarker(mwh) });
-        // Envoie l'info du département pour pouvoir y revenir
-        marker.on('click', () => showSidebar(dc, dep));
-        marker.addTo(datacenterLayer);
-        bounds.push([dc.lat, dc.lng]);
-    });
-    
-    if (bounds.length && animate) map.fitBounds(bounds, { padding: [40, 40], animate: true });
-    
-    showDepartmentSidebar(dep);
-    document.getElementById('back-btn').classList.remove('hidden');
-}
-
-// ================= SIDEBARS DYNAMIQUES =================
-function showDepartmentSidebar(dep) {
-    const sidebar = document.getElementById('sidebar');
-    sidebar.classList.remove('hidden');
-    
-    // On cache le bouton "Retour Liste" car on EST dans la liste
-    document.getElementById('sidebar-back-btn').classList.add('hidden');
-
-    document.getElementById('dc-name').innerText = `Département ${dep.departement}`;
-    document.getElementById('dc-address').innerText = `${dep.dcs.length} sites trouvés`;
-    document.getElementById('naf-badge').style.display = 'none';
-    
-    document.getElementById('conso-section').classList.remove('hidden');
-    document.getElementById('dc-conso').innerText = (dep.totalMwh / 1000).toFixed(1) + " GWh";
-    document.getElementById('conso-bar').style.width = "100%";
-
-    const thead = document.querySelector('table thead');
-    if(thead) {
-        thead.innerHTML = `<tr><th>Site / Adresse</th><th style="text-align:right">Conso</th><th style="text-align:right">Secteur</th></tr>`;
-    }
-
-    const tbody = document.getElementById('history-body');
-    tbody.innerHTML = '';
-    
-    dep.dcs.forEach(dc => {
-        const nafLabel = NAF_LABELS[dc.code_naf] || dc.code_naf;
-        const gwh = ((dc.historique[0]?.mwh || 0) / 1000).toFixed(2);
-        
-        let color = '#666';
-        if(dc.code_naf === '61') color = '#1565c0'; 
-        else if(dc.code_naf === '62') color = '#8e24aa'; 
-        else if(dc.code_naf === '63') color = '#c2185b'; 
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td style="cursor:pointer; color:#0055FF; font-weight:600; border-left: 4px solid ${color}; padding-left: 8px;">${dc.nom}</td>
-            <td style="text-align:right">${gwh} GWh</td>
-            <td style="text-align:right; font-size:0.8em; color:#888;">${nafLabel}</td>
-        `;
-        // Envoie l'info du département pour pouvoir y revenir
-        tr.onclick = () => showSidebar(dc, dep);
-        tbody.appendChild(tr);
-    });
-}
-
-function showSidebar(dc, parentDep = null) {
+function show_sidebar(feature) {
     const sidebar = document.getElementById('sidebar');
     sidebar.classList.remove('hidden');
     
     // NOUVEAU : Afficher le bouton Retour Liste si on vient d'un département
     const backListBtn = document.getElementById('sidebar-back-btn');
-    if (parentDep) {
-        backListBtn.classList.remove('hidden');
-        backListBtn.onclick = () => showDepartmentSidebar(parentDep);
-    } else {
-        backListBtn.classList.add('hidden');
+    backListBtn.classList.add('hidden');
+
+    document.getElementById('dc-name').innerText = feature.properties.name ?? "Nom inconnu";
+    document.getElementById('dc-address').innerText = feature.properties.Adresse ?? "Adresse inconnue";
+
+    const naf = feature.properties.code_secteur_naf2;
+    if(naf) {
+        fetch_route(`naf/${naf}`).then((data) => {
+            const badge = document.getElementById('naf-badge');
+            badge.style.display = 'inline-block';
+            badge.innerText = `NAF ${naf} : ${data["intitulé"]}`;
+        });
+    }
+    else {
+        const badge = document.getElementById('naf-badge');
+        badge.style.display = 'none';
+        badge.innerText = `Pas de code NAF`;
     }
 
-    document.getElementById('dc-name').innerText = dc.nom;
-    document.getElementById('dc-address').innerText = dc.adresse_api || "";
-    
-    const nafLabel = NAF_LABELS[dc.code_naf] || "Inconnu";
-    const badge = document.getElementById('naf-badge');
-    if(badge) {
-        badge.style.display = 'inline-block';
-        badge.innerText = `NAF ${dc.code_naf} (${nafLabel})`;
-        if(dc.code_naf === '61') { badge.style.backgroundColor = '#E3F2FD'; badge.style.color = '#1565C0'; }
-        else if(dc.code_naf === '62') { badge.style.backgroundColor = '#F3E5F5'; badge.style.color = '#8E24AA'; }
-        else { badge.style.backgroundColor = '#FCE4EC'; badge.style.color = '#C2185B'; }
-    }
+    if(is_enedis(feature)) {
+        document.getElementById('conso-section').classList.remove('hidden');
+        document.getElementById('dc-conso').innerText = `${magnitude_order(feature.properties.conso, "M")}Wh`;
 
-    document.getElementById('conso-section').classList.remove('hidden');
+        const body = JSON.stringify({
+            city: feature.properties["Nom commune"],
+            address: feature.properties.Adresse,
+            naf: feature.properties.code_secteur_naf2
+        });
 
-    const thead = document.querySelector('table thead');
-    if(thead) {
-        thead.innerHTML = `<tr><th>Année</th><th style="text-align:right">Conso (MWh)</th><th style="text-align:right">Évolution</th></tr>`;
-    }
+        fetch_route("history", { method: 'POST', body }).then((data) => {
+            const thead = document.querySelector('table thead');
+            if(thead) {
+                thead.innerHTML = `<tr><th>Année</th><th style="text-align:right">Conso (MWh)</th><th style="text-align:right">Évolution</th></tr>`;
+            }
 
-    const tbody = document.getElementById('history-body');
-    tbody.innerHTML = '';
-    
-    if (!dc.historique || dc.historique.length === 0) {
-        document.getElementById('dc-conso').innerText = "N/A";
-        document.getElementById('conso-bar').style.width = "0%";
-        tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;">Aucune donnée</td></tr>`;
-        return;
+            const tbody = document.getElementById('history-body');
+            tbody.innerHTML = '';
+
+            data.forEach((row, i) => {
+                let trend = '-';
+                if (i < data.length - 1) {
+                    const prev = data[i + 1].conso;
+                    const diff = row.conso - prev;
+                    const pct = ((diff / prev) * 100).toFixed(1);
+                    trend = diff > 0 ? `<span style='color:#E63946; font-weight:bold;'>+${pct}% ↗</span>` : `<span style='color:#00C896; font-weight:bold;'>${pct}% ↘</span>`;
+                }
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td><strong>${row["Année"]}</strong></td><td style="text-align:right">${row.conso.toLocaleString('fr-FR')}</td><td style="text-align:right">${trend}</td>`;
+                tbody.appendChild(tr);
+            });
+        })
     }
-    
-    const last = dc.historique[0];
-    document.getElementById('dc-conso').innerText = (last.mwh / 1000).toFixed(1) + " GWh";
-    document.getElementById('conso-bar').style.width = Math.min((last.mwh / 150000) * 100, 100) + "%";
-    
-    dc.historique.forEach((rec, i) => {
-        let trend = '-';
-        if (i < dc.historique.length - 1) {
-            const prev = dc.historique[i + 1].mwh;
-            const diff = rec.mwh - prev;
-            const pct = ((diff / prev) * 100).toFixed(1);
-            trend = diff > 0 ? `<span style='color:#E63946; font-weight:bold;'>+${pct}% ↗</span>` : `<span style='color:#00C896; font-weight:bold;'>${pct}% ↘</span>`;
-        }
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td><strong>${rec.annee}</strong></td><td style="text-align:right">${rec.mwh.toLocaleString('fr-FR')}</td><td style="text-align:right">${trend}</td>`;
-        tbody.appendChild(tr);
-    });
 }
 
 document.getElementById('close-sidebar').addEventListener('click', () => document.getElementById('sidebar').classList.add('hidden'));
@@ -296,7 +200,6 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
         renderRanking(e.target.dataset.filter);
     });
 });
-
 
 function magnitude_order(valeur, uniteInitiale) {
     const prefixes = ['_', 'K', 'M', 'G', 'T', 'P', 'E'];
@@ -368,7 +271,16 @@ function bind_feature_popup(feature, layer) {
         properties += `<b>NAF2</b>: ${feature.properties.code_secteur_naf2}<br/>`;
     }
 
-    layer.bindPopup(properties);
+    const popup = document.createElement('div');
+    popup.innerHTML = properties;
+
+    const button = document.createElement('button');
+    button.innerText = "More";
+    button.addEventListener("click", () => show_sidebar(feature));
+
+    popup.appendChild(button);
+
+    layer.bindPopup(popup);
 }
 
 function estimate_consumption(surface) {
@@ -506,6 +418,7 @@ function redraw_markers() {
 
     const conso_iris = new Map();
     const conso_address = new Map();
+
     let num_dc = 0;
     let est_conso = 0;
     let surface_it_total = 0;
@@ -553,7 +466,6 @@ function redraw_markers() {
     document.getElementById('total-surface-it').innerText = `${surface_it_total} m2`;
 
     markers.addLayer(geojson);
-    // map.addLayer(markers);
 }
 
 async function initDashboard() {

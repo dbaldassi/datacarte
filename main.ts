@@ -1,6 +1,7 @@
 import { Application, Router, RouterContext } from "https://deno.land/x/oak/mod.ts";
 import { DuckDBManager } from "./duckdb_manager.ts";
 import { DuckDBResultReader } from '@duckdb/node-api';
+import { HistoryQuery } from './type.ts';
 
 const duck = new DuckDBManager;
 
@@ -8,6 +9,9 @@ const router = new Router();
 
 router.get("/datacenters", (ctx: RouterContext<string>) => list_datacenters(ctx));
 router.get("/linear_index", (ctx: RouterContext<string>) => get_linear_index(ctx));
+router.get("/naf", (ctx: RouterContext<string>) => get_naf_map(ctx));
+router.get("/naf/:id", (ctx: RouterContext<string>) => get_naf(ctx, Number.parseInt(ctx.params["id"])));
+router.post("/history", (ctx: RouterContext<string>) => get_history(ctx));
 
 const app = new Application();
 
@@ -76,4 +80,42 @@ SELECT regr_slope(conso, surface) AS slope, regr_intercept(conso, surface) AS or
     const rows = reader.getRowObjectsJson();
 
     ctx.response.body = JSON.stringify(rows[0]);
+}
+
+async function get_naf_map(ctx: RouterContext<string>) : Promise<void> {
+    const query = `SELECT * FROM codenaf2`;
+
+    const reader = await duck.execute(query);
+    const rows = reader.getRowObjectsJson();
+
+    ctx.response.body = JSON.stringify(rows);
+}
+
+async function get_naf(ctx: RouterContext<string>, code: number) : Promise<void> {
+    if(!code) ctx.throw(400, "You need to provide a NAF code");
+
+    const query = `SELECT * FROM codenaf2 WHERE code=${code}`;
+
+    const reader = await duck.execute(query);
+    const rows = reader.getRowObjectsJson();
+
+    if(rows.length > 0) ctx.response.body = JSON.stringify(rows[0]);
+    else ctx.response.body = JSON.stringify({});
+}
+
+async function get_history(ctx: RouterContext<string>) : Promise<void> {
+    const params: HistoryQuery = await ctx.request.body.json();
+
+    if(!params.naf) ctx.throw(400, "You need to provide the naf code");
+    if(!params.address) ctx.throw(400, "You need to provide the address");
+    if(!params.city) ctx.throw(400, "You need to provide the city")
+
+    const query = `SELECT Année, "Consommation annuelle totale de l'adresse (MWh)" AS conso FROM consommation_entreprise
+WHERE "Nom commune" = '${params.city}' AND "code_secteur_naf2"='${params.naf}' AND Adresse='${params.address}'
+ORDER BY Année DESC`;
+
+    const reader = await duck.execute(query);
+    const rows = reader.getRowObjectsJson();
+
+    ctx.response.body = JSON.stringify(rows);
 }
