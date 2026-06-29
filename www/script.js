@@ -48,8 +48,8 @@ const baseLayers = {
 };
 
 const overlays = {
-    'Point de livraison': pdl_layer,
     'Datacenters': markers,
+    'Point de livraison': pdl_layer,
     'Connexion PdL et DC': pdl_dc_line_layer
 };
 
@@ -59,24 +59,6 @@ L.control.zoom({ position: 'bottomright' }).addTo(map);
 
 var datacenters_geojson;
 var linear_index;
-
-const dcIcon = L.icon({
-    iconUrl: 'https://cdn-icons-png.flaticon.com/512/2880/2880656.png',
-    iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32]
-});
-
-function getColoredMarker(mwh) {
-    const gwh = mwh / 1000;
-    let color = "#00C896"; // Vert
-    if (gwh >= 10) color = "#d32f2f"; // Rouge
-    else if (gwh >= 1) color = "#f57c00"; // Orange
-
-    return L.divIcon({
-        className: 'custom-pin',
-        html: `<div style="background-color: ${color}; width: 100%; height: 100%; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.4);"></div>`,
-        iconSize: [16, 16], iconAnchor: [8, 8]
-    });
-}
 
 // ================= MASQUE FRANCE =================
 async function loadFranceMask() {
@@ -100,62 +82,6 @@ async function fetch_route(route) {
     } catch (error) {
         console.error(error);
     }
-}
-
-function transformDepartments(departements) {
-    return departements.map(dept => ({
-        departement: dept.code, lat: dept.lat, lng: dept.lng, totalMwh: dept.total_mwh,
-        dcs: dept.datacenters.map(dc => ({
-            nom: dc.nom, adresse_api: dc.adresse_complete, lat: dc.lat, lng: dc.lng,
-            departement: dc.departement, code_naf: dc.code_naf, historique: dc.historique
-        }))
-    }));
-}
-
-// ================= GESTION DES FILTRES =================
-function applyFilters() {
-    const nafFilter = document.getElementById('filter-naf').value;
-    const consoFilter = document.getElementById('filter-conso').value;
-
-    let filteredData = JSON.parse(JSON.stringify(allDepartmentsData));
-
-    filteredData = filteredData.map(dep => {
-        dep.dcs = dep.dcs.filter(dc => {
-            if (nafFilter !== 'all' && String(dc.code_naf) !== String(nafFilter)) return false;
-            const gwh = (dc.historique[0]?.mwh || 0) / 1000;
-            if (consoFilter === 'ultra' && gwh < 100) return false;
-            if (consoFilter === 'high' && (gwh < 10 || gwh >=100)) return false;
-            if (consoFilter === 'medium' && (gwh < 1 || gwh >= 10)) return false;
-            if (consoFilter === 'low' && gwh >= 1) return false;
-            if (consoFilter === 'unknown' && gwh > 0) return false;
-            return true;
-        });
-        dep.totalMwh = dep.dcs.reduce((sum, dc) => sum + (dc.historique[0]?.mwh || 0), 0);
-        return dep;
-    }).filter(dep => dep.dcs.length > 0); 
-
-    currentDepartments = filteredData;
-    updateGlobalStats(currentDepartments.flatMap(d => d.dcs));
-    
-    if (selectedDeptCode !== null) {
-        const currentDep = currentDepartments.find(d => d.departement === selectedDeptCode);
-        if (currentDep) zoomToDepartment(currentDep, false); 
-        else goBackToFrance(); 
-    } else {
-        renderDepartmentMarkers(currentDepartments);
-    }
-    
-    if(!document.getElementById('ranking-panel').classList.contains('hidden')){
-        renderRanking(document.querySelector('.filter-btn.active').dataset.filter);
-    }
-}
-
-// ================= UI STATISTIQUES (MODIFIÉ) =================
-function updateGlobalStats(dcs) {
-    document.getElementById('dc-count').innerText = dcs.length;
-
-    const total = dcs.reduce((acc, d) => acc + (d.historique[0]?.mwh || 0), 0);
-    document.getElementById('total-conso').innerText = (total / 1000).toFixed(1) + " GWh";
 }
 
 // ================= MARKERS & NAVIGATION =================
@@ -464,8 +390,8 @@ function get_surface_category(surface) {
     if(surface > 10000) return "ultra";
     if(surface >= 5000) return "high";
     if(surface >= 1000) return "medium";
-    if(surface >= 500) return "low";
-    if(surface >= 100) return "tiny";
+    if(surface >= 500)  return "low";
+    if(surface >= 100)  return "tiny";
 
     return "micro";
 }
@@ -530,7 +456,7 @@ function apply_filters(feature) {
 function add_enedis_connection(feature) {
     if(feature.properties["Enedis Latitude"]) {
         L.polyline([[feature.properties["Enedis Latitude"], feature.properties["Enedis Longitude"]],
-                    feature.geometry.coordinates.reverse()])
+                    feature.geometry.coordinates.toReversed()])
          .bindTooltip(`${feature.properties.Distance_m} m`)
          .addTo(pdl_dc_line_layer);
     }
@@ -554,7 +480,7 @@ function add_enedis_pdl(feature) {
 function add_rte_connection(feature) {
     if(feature.properties["Géo-point IRIS"]) {
         L.polyline([feature.properties["Géo-point IRIS"].split(','),
-                    feature.geometry.coordinates.reverse()])
+                    feature.geometry.coordinates.toReversed()])
          .bindTooltip(`${feature.properties.Distance_m} m`)
          .addTo(pdl_dc_line_layer);
     }
@@ -575,6 +501,8 @@ function add_rte_pdl(feature) {
 
 function redraw_markers() {
     markers.clearLayers();
+    pdl_layer.clearLayers();
+    pdl_dc_line_layer.clearLayers();
 
     const conso_iris = new Map();
     const conso_address = new Map();
