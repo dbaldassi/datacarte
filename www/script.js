@@ -22,13 +22,6 @@ let allDepartmentsData = [];
 let currentDepartments = []; 
 let selectedDeptCode = null; 
 
-// Dictionnaire NAF
-const NAF_LABELS = {
-    "61": "Télécoms",
-    "62": "Prog/Conseil",
-    "63": "Data Center"
-};
-
 // ================= INIT MAP =================
 
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
