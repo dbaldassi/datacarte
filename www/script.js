@@ -4,7 +4,7 @@ const host = window.location.hostname;
 const port = window.location.port;
 
 // ================= CONFIGURATION MAP =================
-const mapConfig = {
+const map_config = {
     center: [46.2276, 2.2137],
     zoom: 6,
     minZoom: 5,
@@ -15,13 +15,6 @@ const pdl_layer = L.layerGroup();
 const markers = L.markerClusterGroup();
 const pdl_dc_line_layer = L.layerGroup();
 
-// ================= LAYERS & STATE =================
-let departmentLayer;
-let datacenterLayer;
-let allDepartmentsData = []; 
-let currentDepartments = []; 
-let selectedDeptCode = null; 
-
 // ================= INIT MAP =================
 
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
@@ -30,11 +23,11 @@ const osm = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
 });
 
 const map = L.map('map', {
-    maxBounds: mapConfig.maxBounds,
+    maxBounds: map_config.maxBounds,
     maxBoundsViscosity: 1.0,
     zoomControl: false,
     layers: [osm,markers]
-}).setView(mapConfig.center, mapConfig.zoom);
+}).setView(map_config.center, map_config.zoom);
 
 const baseLayers = {
 	'OpenStreetMap': osm,
@@ -54,7 +47,7 @@ var datacenters_geojson;
 var linear_index;
 
 // ================= MASQUE FRANCE =================
-async function loadFranceMask() {
+async function load_france_mask() {
     try {
         const res = await fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries/FRA.geo.json');
         if (!res.ok) return;
@@ -77,17 +70,7 @@ async function fetch_route(route, opts) {
     }
 }
 
-function show_sidebar(feature) {
-    const sidebar = document.getElementById('sidebar');
-    sidebar.classList.remove('hidden');
-    
-    // NOUVEAU : Afficher le bouton Retour Liste si on vient d'un département
-    const backListBtn = document.getElementById('sidebar-back-btn');
-    backListBtn.classList.add('hidden');
-
-    document.getElementById('dc-name').innerText = feature.properties.name ?? "Nom inconnu";
-    document.getElementById('dc-address').innerText = feature.properties.Adresse ?? "Adresse inconnue";
-
+function sidebar_display_naf(feature) {
     const naf = feature.properties.code_secteur_naf2;
     if(naf) {
         fetch_route(`naf/${naf}`).then((data) => {
@@ -101,98 +84,56 @@ function show_sidebar(feature) {
         badge.style.display = 'none';
         badge.innerText = `Pas de code NAF`;
     }
+}
 
-    if(is_enedis(feature)) {
-        document.getElementById('conso-section').classList.remove('hidden');
-        document.getElementById('dc-conso').innerText = `${magnitude_order(feature.properties.conso, "M")}Wh`;
+function sidebar_display_enedis_history(feature) {
+    document.getElementById('conso-section').classList.remove('hidden');
+    document.getElementById('dc-conso').innerText = `${magnitude_order(feature.properties.conso, "M")}Wh`;
 
-        const body = JSON.stringify({
-            city: feature.properties["Nom commune"],
-            address: feature.properties.Adresse,
-            naf: feature.properties.code_secteur_naf2
-        });
+    const body = JSON.stringify({
+        city: feature.properties["Nom commune"],
+        address: feature.properties.Adresse,
+        naf: feature.properties.code_secteur_naf2
+    });
 
-        fetch_route("history", { method: 'POST', body }).then((data) => {
-            const thead = document.querySelector('table thead');
-            if(thead) {
-                thead.innerHTML = `<tr><th>Année</th><th style="text-align:right">Conso (MWh)</th><th style="text-align:right">Évolution</th></tr>`;
+    fetch_route("history", { method: 'POST', body }).then((data) => {
+        const thead = document.querySelector('table thead');
+        if(thead) {
+            thead.innerHTML = `<tr><th>Année</th><th style="text-align:right">Conso (MWh)</th><th style="text-align:right">Évolution</th></tr>`;
+        }
+
+        const tbody = document.getElementById('history-body');
+        tbody.innerHTML = '';
+
+        data.forEach((row, i) => {
+            let trend = '-';
+            if (i < data.length - 1) {
+                const prev = data[i + 1].conso;
+                const diff = row.conso - prev;
+                const pct = ((diff / prev) * 100).toFixed(1);
+                trend = diff > 0 ? `<span style='color:#E63946; font-weight:bold;'>+${pct}% ↗</span>` : `<span style='color:#00C896; font-weight:bold;'>${pct}% ↘</span>`;
             }
-
-            const tbody = document.getElementById('history-body');
-            tbody.innerHTML = '';
-
-            data.forEach((row, i) => {
-                let trend = '-';
-                if (i < data.length - 1) {
-                    const prev = data[i + 1].conso;
-                    const diff = row.conso - prev;
-                    const pct = ((diff / prev) * 100).toFixed(1);
-                    trend = diff > 0 ? `<span style='color:#E63946; font-weight:bold;'>+${pct}% ↗</span>` : `<span style='color:#00C896; font-weight:bold;'>${pct}% ↘</span>`;
-                }
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td><strong>${row["Année"]}</strong></td><td style="text-align:right">${row.conso.toLocaleString('fr-FR')}</td><td style="text-align:right">${trend}</td>`;
-                tbody.appendChild(tr);
-            });
-        })
-    }
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td><strong>${row["Année"]}</strong></td><td style="text-align:right">${row.conso.toLocaleString('fr-FR')}</td><td style="text-align:right">${trend}</td>`;
+            tbody.appendChild(tr);
+        });
+    })
 }
 
-document.getElementById('close-sidebar').addEventListener('click', () => document.getElementById('sidebar').classList.add('hidden'));
-
-// ================= RANKING PANEL =================
-function showRankingPanel() {
-    document.getElementById('ranking-panel').classList.remove('hidden');
-    renderRanking(document.querySelector('.filter-btn.active').dataset.filter);
-}
-
-function renderRanking(sortBy = 'conso') {
-    const list = document.getElementById('ranking-list');
-    list.innerHTML = '';
+function show_sidebar(feature) {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.remove('hidden');
     
-    if (currentDepartments.length === 0) {
-        list.innerHTML = "<div style='text-align:center; padding:20px; color:#888;'>Aucun département pour ce filtre.</div>";
-        return;
-    }
+    const back = document.getElementById('sidebar-back-btn');
+    back.classList.add('hidden');
 
-    const sorted = [...currentDepartments].sort((a, b) => {
-        return sortBy === 'conso' ? b.totalMwh - a.totalMwh : b.dcs.length - a.dcs.length;
-    });
-    
-    const maxVal = sortBy === 'conso' ? sorted[0].totalMwh : sorted[0].dcs.length;
+    document.getElementById('dc-name').innerText = feature.properties.name ?? "Nom inconnu";
+    document.getElementById('dc-address').innerText = feature.properties.Adresse ?? "Adresse inconnue";
 
-    sorted.forEach((dep, index) => {
-        const item = document.createElement('div');
-        const val = sortBy === 'conso' ? dep.totalMwh : dep.dcs.length;
-        const pct = (val / maxVal) * 100;
-        
-        item.className = 'ranking-item';
-        item.innerHTML = `
-            <div class="rank-number">#${index + 1}</div>
-            <div class="rank-info">
-                <div class="dept-name">Département ${dep.departement}</div>
-                <div class="dept-stats">${dep.dcs.length} Sites • ${(dep.totalMwh / 1000).toFixed(1)} GWh</div>
-                <div class="rank-bar"><div class="rank-bar-fill" style="width: ${pct}%"></div></div>
-            </div>
-        `;
-        item.onclick = () => {
-            document.getElementById('ranking-panel').classList.add('hidden');
-            zoomToDepartment(dep, true);
-        };
-        list.appendChild(item);
-    });
+    sidebar_display_naf(feature);
+
+    if(is_enedis(feature)) sidebar_display_enedis_history(feature);
 }
-
-// ================= INIT =================
-document.getElementById('ranking-btn').addEventListener('click', showRankingPanel);
-document.getElementById('close-ranking').addEventListener('click', () => document.getElementById('ranking-panel').classList.add('hidden'));
-
-document.querySelectorAll('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        renderRanking(e.target.dataset.filter);
-    });
-});
 
 function magnitude_order(valeur, uniteInitiale) {
     const prefixes = ['_', 'K', 'M', 'G', 'T', 'P', 'E'];
@@ -404,65 +345,68 @@ function add_rte_pdl(feature) {
     }
 }
 
+function on_each_feature(feature, layer, metrics) {
+    bind_feature_popup(feature, layer);
+
+    const surface = feature.properties["ITSurface"] ?? get_it_surface(feature.properties.Superficie, feature.properties.Hauteur);
+
+    if(is_enedis(feature)) {
+        if(!metrics.conso_address.has(feature.properties.Adresse)) {
+            metrics.conso_address.set(feature.properties.Adresse, feature.properties.conso);
+            add_enedis_pdl(feature);
+        }
+
+        add_enedis_connection(feature);
+    }
+    else if(is_rte(feature)) {
+        if(!metrics.conso_address.has(feature.properties["Code IRIS"])) {
+            metrics.conso_iris.set(feature.properties["Code IRIS"], feature.properties.conso);
+            add_rte_pdl(feature);
+        }
+
+        add_rte_connection(feature);
+    }
+    else {
+        metrics.est_conso += estimate_consumption(surface);
+    }
+
+    metrics.num_dc += 1;
+    metrics.surface_it_total += surface;
+}
+
 function redraw_markers() {
     markers.clearLayers();
     pdl_layer.clearLayers();
     pdl_dc_line_layer.clearLayers();
 
-    const conso_iris = new Map();
-    const conso_address = new Map();
-
-    let num_dc = 0;
-    let est_conso = 0;
-    let surface_it_total = 0;
+    const metrics = {
+        num_dc: 0,
+        est_conso: 0,
+        surface_it_total: 0,
+        conso_address: new Map(),
+        conso_iris: new Map()
+    };
 
     const geojson = L.geoJSON(datacenters_geojson, {
         pointToLayer: (feature, latlng) => L.circleMarker(latlng),
         style: set_feature_style,
         filter: apply_filters,
-        onEachFeature: (feature, layer) => {
-            bind_feature_popup(feature, layer);
-
-            const surface = feature.properties["ITSurface"] ?? get_it_surface(feature.properties.Superficie, feature.properties.Hauteur);
-
-            if(is_enedis(feature)) {
-                if(!conso_address.has(feature.properties.Adresse)) {
-                    conso_address.set(feature.properties.Adresse, feature.properties.conso);
-                    add_enedis_pdl(feature);
-                }
-
-                add_enedis_connection(feature);
-            }
-            else if(is_rte(feature)) {
-                if(!conso_address.has(feature.properties["Code IRIS"])) {
-                    conso_iris.set(feature.properties["Code IRIS"], feature.properties.conso);
-                    add_rte_pdl(feature);
-                }
-
-                add_rte_connection(feature);
-            }
-            else {
-                est_conso += estimate_consumption(surface);
-            }
-
-            num_dc += 1;
-            surface_it_total += surface;
-        }
+        onEachFeature: (feature, layer) => on_each_feature(feature, layer, metrics)
     });
 
-    const conso = conso_iris.values().reduce((a, b) => a + b, 0) +
-          conso_address.values().reduce((a, b) => a + b, 0);
+    const conso = metrics.conso_iris.values().reduce((a, b) => a + b, 0) +
+          metrics.conso_address.values().reduce((a, b) => a + b, 0);
 
-    document.getElementById('dc-count').innerText = num_dc;
+    document.getElementById('dc-count').innerText = metrics.num_dc;
     document.getElementById('total-conso-pdl').innerText = `${magnitude_order(conso, "M")}Wh`;
-    document.getElementById('total-conso-est').innerText = `${magnitude_order(conso + est_conso, "M")}Wh`;
-    document.getElementById('total-surface-it').innerText = `${surface_it_total} m2`;
+    document.getElementById('total-conso-est').innerText = `${magnitude_order(conso + metrics.est_conso, "M")}Wh`;
+    document.getElementById('total-surface-it').innerText = `${metrics.surface_it_total} m2`;
 
     markers.addLayer(geojson);
 }
 
-async function initDashboard() {
-    loadFranceMask();
+async function init() {
+    load_france_mask();
 
     try {
         linear_index = await fetch_route("linear_index");
@@ -472,6 +416,16 @@ async function initDashboard() {
         document.getElementById('filter-conso').addEventListener('change', redraw_markers);
         document.getElementById('filter-pdl').addEventListener('change', redraw_markers);
         document.getElementById('filter-surface').addEventListener('change', redraw_markers);
+        document.getElementById('close-sidebar').addEventListener('click', () => document.getElementById('sidebar').classList.add('hidden'));
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                renderRanking(e.target.dataset.filter);
+            });
+        });
+
 
     } catch (e) {
         console.error(e);
@@ -479,4 +433,4 @@ async function initDashboard() {
     }
 }
 
-initDashboard();
+document.addEventListener("DOMContentLoaded", () => init());
