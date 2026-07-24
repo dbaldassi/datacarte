@@ -1,8 +1,4 @@
 
-const protocol = window.location.protocol;
-const host = window.location.hostname;
-const port = window.location.port;
-
 // ================= CONFIGURATION MAP =================
 const map_config = {
     center: [46.2276, 2.2137],
@@ -43,7 +39,6 @@ const layerControl = L.control.layers(baseLayers, overlays).addTo(map);
 
 L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-var datacenters_geojson;
 var linear_index;
 
 // ================= MASQUE FRANCE =================
@@ -58,6 +53,10 @@ async function load_france_mask() {
 
 // ================= CHARGEMENT =================
 async function fetch_route(route, opts) {
+    const protocol = window.location.protocol;
+    const host = window.location.hostname;
+    const port = window.location.port;
+
     try {
         const url = `${protocol}//${host}:${port}/${route}`;
         const response = await fetch(url, opts);
@@ -135,28 +134,28 @@ function show_sidebar(feature) {
     if(is_enedis(feature)) sidebar_display_enedis_history(feature);
 }
 
-function magnitude_order(valeur, uniteInitiale) {
+function magnitude_order(value, uniteInitiale) {
     const prefixes = ['_', 'K', 'M', 'G', 'T', 'P', 'E'];
 
-    const indexInitial = prefixes.indexOf(uniteInitiale.toUpperCase());
-    if (indexInitial === -1) {
+    const initial_index = prefixes.indexOf(uniteInitiale.toUpperCase());
+    if (initial_index === -1) {
         throw new Error("Unité initiale non supportée. Utilisez K, M, G, T, P, E.");
     }
 
-    let valeurBrute = valeur * Math.pow(1000, indexInitial);
+    let raw_value = value * Math.pow(1000, initial_index);
 
-    if (valeurBrute === 0) return "0 "; // Gestion du zéro
+    if (raw_value === 0) return "0 "; // Gestion du zéro
 
-    let indexOptimal = Math.floor(Math.log10(Math.abs(valeurBrute)) / 3);
+    let optimal_index = Math.floor(Math.log10(Math.abs(raw_value)) / 3);
 
-    indexOptimal = Math.max(0, Math.min(indexOptimal, prefixes.length - 1));
+    optimal_index = Math.max(0, Math.min(optimal_index, prefixes.length - 1));
 
-    let valeurFinale = valeurBrute / Math.pow(1000, indexOptimal);
-    valeurFinale = Math.round(valeurFinale * 1e12) / 1e12;
+    let final_value = raw_value / Math.pow(1000, optimal_index);
+    final_value = Math.round(final_value * 1e12) / 1e12;
 
-    const suffixe = prefixes[indexOptimal] === '_' ? '' : prefixes[indexOptimal];
+    const suffix = prefixes[optimal_index] === '_' ? '' : prefixes[optimal_index];
 
-    return `${Math.round(valeurFinale * 100) / 100} ${suffixe}`;
+    return `${Math.round(final_value * 100) / 100} ${suffix}`;
 }
 
 function get_it_surface(area, height) {
@@ -374,7 +373,7 @@ function on_each_feature(feature, layer, metrics) {
     metrics.surface_it_total += surface;
 }
 
-function redraw_markers() {
+function redraw_markers(datacenters_geojson) {
     markers.clearLayers();
     pdl_layer.clearLayers();
     pdl_dc_line_layer.clearLayers();
@@ -410,12 +409,12 @@ async function init() {
 
     try {
         linear_index = await fetch_route("linear_index");
-        datacenters_geojson = await fetch_route("datacenters");
-        redraw_markers();
+        const datacenters_geojson = await fetch_route("datacenters");
+        redraw_markers(datacenters_geojson);
 
-        document.getElementById('filter-conso').addEventListener('change', redraw_markers);
-        document.getElementById('filter-pdl').addEventListener('change', redraw_markers);
-        document.getElementById('filter-surface').addEventListener('change', redraw_markers);
+        document.getElementById('filter-conso').addEventListener('change', () => redraw_markers(datacenters_geojson));
+        document.getElementById('filter-pdl').addEventListener('change', () => redraw_markers(datacenters_geojson));
+        document.getElementById('filter-surface').addEventListener('change', () => redraw_markers(datacenters_geojson));
         document.getElementById('close-sidebar').addEventListener('click', () => document.getElementById('sidebar').classList.add('hidden'));
 
         document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -425,7 +424,6 @@ async function init() {
                 renderRanking(e.target.dataset.filter);
             });
         });
-
 
     } catch (e) {
         console.error(e);
